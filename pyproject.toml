@@ -1,0 +1,19 @@
+[project]
+name = "py-ucan"
+version = "0.1.0"
+description = "A wrapper for yt-dlp to get video titles and download videos"
+requires-python = ">=3.11"
+dependencies = [
+    "yt-dlp",
+    "click",
+]
+
+[project.scripts]
+py-ucan = "py_screw.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/py_screw"]

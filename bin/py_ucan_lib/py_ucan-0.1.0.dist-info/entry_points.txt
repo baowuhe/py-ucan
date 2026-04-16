@@ -1,0 +1,2 @@
+[console_scripts]
+py-ucan = py_screw.cli:main

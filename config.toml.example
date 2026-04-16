@@ -1,0 +1,34 @@
+# py-ucan 配置文件
+
+[global]
+# 代理地址池（支持 http/https/socks5，可设置多个，按顺序尝试可用性）
+proxy_pool = [
+    "socks5://192.168.2.61:6665",
+    "http://127.0.0.1:8080",
+    "https://proxy.example.com:8080",
+]
+
+[youtube]
+# Cookie 文件路径（用于登录验证）
+# 支持移动端和PC端分别设置cookie文件
+# 当视频URL域名为 m.youtube.com 时使用移动端cookie，否则使用PC端cookie
+cookies_pc = "${COOKIE_FILE}"
+cookies_mobile = "${COOKIE_FILE_MOBILE}"
+
+# 远程模板路径
+remote_template = "ejs:github"
+
+# 下载临时目录
+temp_path = "/wsx/store/.cache/youtube/"
+
+# 下载保存目录
+home_path = "/wsx/store/youtube/video/"
+
+# 视频格式（默认）
+format = "bv[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv+ba/b"
+
+# 最大重试次数（0表示不重试）
+max_retries = 0
+
+# 重试间隔（秒）
+retry_delay = 6

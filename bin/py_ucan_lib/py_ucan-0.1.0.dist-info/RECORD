@@ -1,0 +1,7 @@
+py_screw/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+py_screw/__main__.py,sha256=MQQydL5deMTpM4XpfdP07i7sG4JSfWtG3i2sekobSmc,69
+py_screw/cli.py,sha256=URyJQlO76OQX1z2X20r2YonV4jQXCGmtpGVZHjNEvqs,7574
+py_ucan-0.1.0.dist-info/METADATA,sha256=PqhPEuqKsA9_PpkWUJXC5AJ0-vmAyvzmdWqJjzTN-8s,188
+py_ucan-0.1.0.dist-info/WHEEL,sha256=QccIxa26bgl1E6uMy58deGWi-0aeIkkangHcxk2kWfw,87
+py_ucan-0.1.0.dist-info/entry_points.txt,sha256=EF4eyUfuRrbEWJqmWvJhOiFZrBBOlniHDo5F88u0XJ8,46
+py_ucan-0.1.0.dist-info/RECORD,,
