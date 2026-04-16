@@ -52,6 +52,26 @@ def is_mobile_url(video_url: str) -> bool:
     return parsed.netloc == "m.youtube.com"
 
 
+def validate_url(url: str) -> bool:
+    """Validate that the URL has a valid scheme and netloc."""
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except (ValueError, AttributeError):
+        return False
+
+
+def validate_cookie_file(path: str) -> bool:
+    """Validate that the cookie file exists and is readable."""
+    p = Path(path)
+    return p.exists() and p.is_file()
+
+
+def ensure_dir(path: str) -> None:
+    """Create directory if it doesn't exist."""
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+
 def get_config() -> dict:
     """Load configuration from config.toml files."""
     config = {}
@@ -66,18 +86,18 @@ def get_config() -> dict:
     # Merge global and youtube sections
     merged = {}
 
-    # Start with global section
+    # Start with global section (proxy_pool lives here)
     if "global" in config:
         merged.update(config["global"])
 
-    # Youtube section overrides global
+    # Youtube section overrides global for platform-specific settings
     if "youtube" in config:
         merged.update(config["youtube"])
 
-    # Resolve proxy_pool: pick the first available one
-    if proxy_pool := merged.get("proxy_pool"):
+    # Resolve proxy_pool: prioritize youtube section, fallback to global
+    proxy_pool = config.get("youtube", {}).get("proxy_pool") or config.get("global", {}).get("proxy_pool")
+    if proxy_pool:
         merged["proxy"] = get_first_available_proxy(proxy_pool)
-        # if it's a single string, keep it as is
 
     return merged
 
@@ -92,8 +112,13 @@ def build_base_cmd(config: dict, video_url: str = "") -> list[str]:
     else:
         cookies = config.get("cookies_pc")
 
-    if cookies:
-        cmd.extend(["--cookies", cookies])
+    if not cookies:
+        click.echo("Error: Cookie file path is empty. Please set cookies_pc or cookies_mobile in config.", err=True)
+        raise SystemExit(1)
+    if not validate_cookie_file(cookies):
+        click.echo(f"Error: Cookie file not found or not readable: {cookies}", err=True)
+        raise SystemExit(1)
+    cmd.extend(["--cookies", cookies])
 
     if proxy := config.get("proxy"):
         cmd.extend(["--proxy", proxy])
@@ -135,7 +160,7 @@ def sanitize_filename(title: str, max_len: int = 60) -> str:
     return filename
 
 
-@click.group()
+@click.group(version="0.1.0")
 @click.option("--verbose", is_flag=True, help="Print py-ucan debug info")
 @click.pass_context
 def main(ctx, verbose):
@@ -175,6 +200,9 @@ def info():
 @click.pass_obj
 def youtube(obj, video_url: str):
     """Get the title and upload date of a YouTube video."""
+    if not validate_url(video_url):
+        click.echo(f"Error: Invalid URL: {video_url}", err=True)
+        raise SystemExit(1)
     verbose = obj.get("verbose", False)
     config = get_config()
     cmd = build_base_cmd(config, video_url)
@@ -207,8 +235,17 @@ def down():
 @click.pass_obj
 def youtube(obj, video_url: str, name: str | None):
     """Download a video from YouTube."""
+    if not validate_url(video_url):
+        click.echo(f"Error: Invalid URL: {video_url}", err=True)
+        raise SystemExit(1)
     verbose = obj.get("verbose", False)
     config = get_config()
+
+    # Ensure directories exist
+    if temp_path := config.get("temp_path"):
+        ensure_dir(temp_path)
+    if home_path := config.get("home_path"):
+        ensure_dir(home_path)
 
     if name is None:
         # Get title and upload_date from info command
