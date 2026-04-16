@@ -1,6 +1,6 @@
 # py-ucan
 
-A wrapper for yt-dlp to get video titles and download videos.
+常用命令包装器，简化使用，对AI Agent友好，目前支持调用yt-dlp进行视频信息获取、下载等相关操作。
 
 ## Requirements
 
