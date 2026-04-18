@@ -160,7 +160,7 @@ def sanitize_filename(title: str, max_len: int = 60) -> str:
     return filename
 
 
-@click.group(version="0.1.0")
+@click.group()
 @click.option("--verbose", is_flag=True, help="Print py-ucan debug info")
 @click.pass_context
 def main(ctx, verbose):
@@ -221,6 +221,53 @@ def youtube(obj, video_url: str):
         click.echo(json.dumps(output, ensure_ascii=False))
     if result.stderr:
         click.echo(result.stderr, err=True)
+
+
+@info.command()
+@click.argument("playlist_url")
+@click.pass_obj
+def youtube_list(obj, playlist_url: str):
+    """Get the metadata of a YouTube playlist."""
+    if not validate_url(playlist_url):
+        click.echo(f"Error: Invalid URL: {playlist_url}", err=True)
+        raise SystemExit(1)
+    verbose = obj.get("verbose", False)
+    config = get_config()
+    cmd = build_base_cmd(config, playlist_url)
+    cmd.extend(["--dump-json", "--flat-playlist", playlist_url])
+
+    if verbose:
+        click.echo(" ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0 and result.stderr:
+        click.echo(result.stderr, err=True)
+        raise SystemExit(1)
+
+    if result.stdout:
+        entries = []
+        playlist_title = ""
+        playlist_id = ""
+
+        for line in result.stdout.strip().split("\n"):
+            if line:
+                data = json.loads(line)
+                if not playlist_title:
+                    playlist_title = data.get("playlist_title", "")
+                    playlist_id = data.get("playlist_id", "")
+                entries.append({
+                    "title": data.get("title", ""),
+                    "upload_date": data.get("upload_date", ""),
+                    "url": data.get("url", ""),
+                    "playlist_index": data.get("playlist_index", 0),
+                })
+
+        output = {
+            "playlist_title": playlist_title,
+            "playlist_id": playlist_id,
+            "playlist": entries,
+        }
+        click.echo(json.dumps(output, ensure_ascii=False))
 
 
 @main.group()
