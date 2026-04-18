@@ -160,6 +160,53 @@ def sanitize_filename(title: str, max_len: int = 60) -> str:
     return filename
 
 
+def get_playlist_metadata(config: dict, playlist_url: str, verbose: bool = False) -> tuple[dict, subprocess.CompletedProcess]:
+    """Fetch YouTube playlist metadata using yt-dlp.
+
+    Returns:
+        A tuple of (playlist_data, result) where playlist_data contains:
+        - playlist_title: str
+        - playlist_id: str
+        - playlist: list of dicts with keys: title, upload_date, url, playlist_index
+        and result is the subprocess.CompletedProcess object.
+    """
+    cmd = build_base_cmd(config, playlist_url)
+    cmd.extend(["--dump-json", "--flat-playlist", playlist_url])
+
+    if verbose:
+        click.echo(" ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0 and result.stderr:
+        return {}, result
+
+    entries = []
+    playlist_title = ""
+    playlist_id = ""
+
+    if result.stdout:
+        for line in result.stdout.strip().split("\n"):
+            if line:
+                data = json.loads(line)
+                if not playlist_title:
+                    playlist_title = data.get("playlist_title", "")
+                    playlist_id = data.get("playlist_id", "")
+                entries.append({
+                    "title": data.get("title", ""),
+                    "upload_date": data.get("upload_date", ""),
+                    "url": data.get("url", ""),
+                    "playlist_index": data.get("playlist_index", 0),
+                })
+
+    playlist_data = {
+        "playlist_title": playlist_title,
+        "playlist_id": playlist_id,
+        "playlist": entries,
+    }
+    return playlist_data, result
+
+
+@click.version_option("0.2.0", prog_name="py-ucan")
 @click.group()
 @click.option("--verbose", is_flag=True, help="Print py-ucan debug info")
 @click.pass_context
@@ -221,6 +268,26 @@ def youtube(obj, video_url: str):
         click.echo(json.dumps(output, ensure_ascii=False))
     if result.stderr:
         click.echo(result.stderr, err=True)
+
+
+@info.command()
+@click.argument("playlist_url")
+@click.pass_obj
+def youtube_list(obj, playlist_url: str):
+    """Get the metadata of a YouTube playlist."""
+    if not validate_url(playlist_url):
+        click.echo(f"Error: Invalid URL: {playlist_url}", err=True)
+        raise SystemExit(1)
+    verbose = obj.get("verbose", False)
+    config = get_config()
+
+    playlist_data, result = get_playlist_metadata(config, playlist_url, verbose)
+
+    if result.returncode != 0 and result.stderr:
+        click.echo(result.stderr, err=True)
+        raise SystemExit(1)
+
+    click.echo(json.dumps(playlist_data, ensure_ascii=False))
 
 
 @main.group()
@@ -294,6 +361,94 @@ def youtube(obj, video_url: str, name: str | None):
         else:
             click.echo(f"Error: Video file not found at {final_path}", err=True)
             raise SystemExit(1)
+
+
+@down.command()
+@click.argument("playlist_url")
+@click.pass_obj
+def youtube_list(obj, playlist_url: str):
+    """Download a YouTube playlist."""
+    if not validate_url(playlist_url):
+        click.echo(f"Error: Invalid URL: {playlist_url}", err=True)
+        raise SystemExit(1)
+    verbose = obj.get("verbose", False)
+    config = get_config()
+
+    # Ensure directories exist
+    if temp_path := config.get("temp_path"):
+        ensure_dir(temp_path)
+    if home_path := config.get("home_path"):
+        ensure_dir(home_path)
+
+    playlist_data, result = get_playlist_metadata(config, playlist_url, verbose)
+
+    if result.returncode != 0 and result.stderr:
+        click.echo(result.stderr, err=True)
+        raise SystemExit(1)
+
+    if not playlist_data.get("playlist"):
+        click.echo("Error: No entries in playlist", err=True)
+        raise SystemExit(1)
+
+    playlist_title = playlist_data.get("playlist_title") or "playlist"
+    entries = playlist_data["playlist"]
+
+    # Sanitize playlist title and create folder
+    folder_name = sanitize_filename(playlist_title)
+    playlist_dir = Path(home_path) / folder_name if home_path else Path(folder_name)
+    ensure_dir(str(playlist_dir))
+
+    # Calculate padding width for playlist index
+    max_index = max(e["playlist_index"] for e in entries)
+    index_width = len(str(max_index))
+
+    # Download each video
+    success_count = 0
+    failed_count = 0
+    failed_videos = []
+
+    for entry in entries:
+        video_url = entry["url"]
+        video_title = sanitize_filename(entry["title"])
+        playlist_index = str(entry["playlist_index"]).zfill(index_width)
+        output_name = f"{playlist_index}_{video_title}"
+
+        cmd = build_base_cmd(config, video_url)
+        output_template = f"{playlist_dir}/{output_name}.%(ext)s"
+        cmd.extend(["-o", output_template])
+
+        # Path options
+        if temp_path := config.get("temp_path"):
+            cmd.extend(["-P", f"temp:{temp_path}"])
+        if home_path := config.get("home_path"):
+            cmd.extend(["-P", f"home:{home_path}"])
+
+        # Format
+        fmt = config.get("format", "bv[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv+ba/b")
+        cmd.extend(["-f", fmt])
+
+        # Force output to mp4
+        cmd.extend(["--merge-output-format", "mp4"])
+
+        cmd.append(video_url)
+
+        if verbose:
+            click.echo(" ".join(cmd))
+        result = subprocess.run(cmd)
+
+        if result.returncode == 0:
+            click.echo(f"Downloaded: {output_name}")
+            success_count += 1
+        else:
+            if result.stderr:
+                click.echo(result.stderr, err=True)
+            failed_count += 1
+            failed_videos.append((playlist_index, output_name, video_url))
+
+    click.echo(f"\nPlaylist downloaded: {success_count} succeeded, {failed_count} failed")
+    for idx, name, url in failed_videos:
+        click.echo(f"Failed: [{idx}] {name} ({url})")
+    click.echo(f"Playlist saved to: {playlist_dir}")
 
 
 if __name__ == "__main__":
